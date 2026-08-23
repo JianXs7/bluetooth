@@ -99,23 +99,24 @@ dependencies {
 }
 
 xposed {
-    entryClass.set("net.ankio.bluetooth.hook.BluetoothXposedEntry")
+    entryClass.set("net.ankio.bluetooth.hook.Main")
     moduleDescription.set("A tool that can debug Bluetooth / 一个可以调试蓝牙的工具")
     minXposedVersion.set(93)
     scope("com.android.bluetooth", "net.ankio.bluetooth")
 }
 
-// 让 xposed_init 同时包含传统蓝牙入口(BtHookEntry)与框架入口(BluetoothXposedEntry)。
-// net.ankio.xposed 插件默认只生成单入口(BluetoothXposedEntry)，且其生成的 assets 会覆盖 src/main/assets。
-// 因此在插件生成源文件后立刻改写为双入口，确保 merge 后打入 APK 的 xposed_init 两个入口都在。
+// 让 xposed_init 同时包含纯传统入口：Main（蓝牙进程）+ MainServer（app 自身）。
+// 注意：不要包含 net.ankio.xposed.lib 框架入口（BluetoothXposedEntry）——在目标 ColorOS 16 金标设备上，
+// 框架入口不会被 LSPosed 注入蓝牙进程，而纯传统 IXposedHookLoadPackage 入口(Main)可以被注入。
+// 因此这里在插件生成源文件后立即改写为纯传统双入口，确保打入 APK 的 xposed_init 生效。
 tasks.named("generateXposedMetadata") {
     doLast {
         val generatedDir = layout.buildDirectory.dir("generated/xposed/assets").get().asFile
         val initFile = File(generatedDir, "xposed_init")
         initFile.parentFile.mkdirs()
         initFile.writeText(
-            "net.ankio.bluetooth.hook.BtHookEntry\n" +
-                "net.ankio.bluetooth.hook.BluetoothXposedEntry\n",
+            "net.ankio.bluetooth.hook.Main\n" +
+                "net.ankio.bluetooth.hook.MainServer\n",
         )
         logger.lifecycle("Overwrote generated xposed_init at ${initFile.absolutePath}")
     }
