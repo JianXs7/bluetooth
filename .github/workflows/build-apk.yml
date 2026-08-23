@@ -1,7 +1,8 @@
-name: Build debug APK
+name: Build APK
 
-# 在 push 到本分支、或手动点击运行时，打包 debug APK 并作为 artifact 上传，
-# 便于下载到手机验证「本机模拟」修复结果。
+# 在 push 到本分支、或手动点击运行时，打包 debug + release APK 并作为 artifact 上传。
+# release 使用与 debug 相同的签名配置（见 app/build.gradle.kts 中 signingConfigs.getByName("debug")），
+# 因此可直接安装；两条产物均便于下载到手机验证「本机模拟」修复结果。
 on:
   push:
     branches:
@@ -34,6 +35,9 @@ jobs:
       - name: Build debug APK
         run: ./gradlew :app:assembleDebug --no-daemon
 
+      - name: Build release APK
+        run: ./gradlew :app:assembleRelease --no-daemon
+
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
         with:
@@ -41,4 +45,13 @@ jobs:
           path: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/debug/**/output-metadata.json
+          if-no-files-found: error
+
+      - name: Upload release APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bluetooth-release-apk
+          path: |
+            app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/release/**/output-metadata.json
           if-no-files-found: error

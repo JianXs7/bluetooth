@@ -11,4 +11,7 @@ object PrefKeys {
     const val SIMULATE_MODE = "simulate_mode"
     const val WEBDAV_LAST = "webdav_last"
     const val SETTING_LANGUAGE = "setting_language"
+
+    /** 是否在桌面显示应用图标（控制 MainActivityLauncher 的启用/禁用） */
+    const val SHOW_LAUNCHER_ICON = "show_launcher_icon"
 }

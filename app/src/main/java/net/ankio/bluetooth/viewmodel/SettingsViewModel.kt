@@ -2,6 +2,7 @@ package net.ankio.bluetooth.viewmodel
 
 import androidx.lifecycle.ViewModel
 import net.ankio.bluetooth.App
+import net.ankio.bluetooth.utils.LauncherIconUtils
 import net.ankio.bluetooth.utils.LocaleDelegate
 import net.ankio.bluetooth.utils.PrefKeys
 import net.ankio.bluetooth.utils.SpUtils
@@ -21,5 +22,17 @@ class SettingsViewModel : ViewModel() {
     ) { value ->
         SpUtils.putString(PrefKeys.SETTING_LANGUAGE, value)
         LocaleDelegate.updateDefaultLocale(App.getLocale(value))
+    }
+
+    /**
+     * 是否在桌面显示应用图标。
+     * 切换后立即落盘并启用/禁用 MainActivityLauncher（无需重启）。
+     */
+    var showLauncherIcon: Boolean by persistedState(
+        initialValue = SpUtils.getBoolean(PrefKeys.SHOW_LAUNCHER_ICON, true),
+        debounceMs = 0L,
+    ) { value ->
+        SpUtils.putBoolean(PrefKeys.SHOW_LAUNCHER_ICON, value)
+        LauncherIconUtils.setEnabled(App.context, value)
     }
 }

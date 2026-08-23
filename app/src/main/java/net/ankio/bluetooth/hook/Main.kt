@@ -6,7 +6,6 @@ import de.robv.android.xposed.IXposedHookLoadPackage
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedHelpers
 import de.robv.android.xposed.callbacks.XC_LoadPackage
-import net.ankio.bluetooth.model.SimulateMode
 import net.ankio.bluetooth.utils.ByteUtils
 import net.ankio.bluetooth.utils.HookLogManager
 import net.ankio.bluetooth.utils.PrefKeys
@@ -120,8 +119,8 @@ class Main : IXposedHookLoadPackage {
 
         override fun run() {
             // 实时判断模式：仅当本机模拟(Self)时才注入；切换开关无需重启蓝牙，下一个 tick 即生效。
-            val mode = HookConfig.getString(PrefKeys.SIMULATE_MODE, "")
-            if (mode == SimulateMode.Self.toString()) {
+            // HookConfig.isSimulateModeSelf() 内部通过 hasFileChanged() 惰性刷新，低开销。
+            if (HookConfig.isSimulateModeSelf()) {
                 if (scanPath == null) {
                     scanPath = resolveScanPath(gattService)
                 }

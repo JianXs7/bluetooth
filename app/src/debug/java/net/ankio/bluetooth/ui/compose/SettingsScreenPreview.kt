@@ -17,7 +17,9 @@ private fun SettingsScreenPreview(
     PreviewAllThemes(config) {
         SettingsScreenContent(
             languageTag = "SYSTEM",
+            showLauncherIcon = true,
             onRecreateForLocale = { },
+            onShowLauncherIconChange = { },
             onThemeChanged = {},
         )
     }
