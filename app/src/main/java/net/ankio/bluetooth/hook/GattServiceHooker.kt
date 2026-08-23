@@ -19,12 +19,10 @@ import java.io.Serializable
 class GattServiceHooker : PartHooker() {
 
     override fun hook() {
-        if (HookConfig.getString(PrefKeys.SIMULATE_MODE, "") != SimulateMode.Self.toString()) {
-            HookLogManager.d(TAG, "Local BLE simulation disabled")
-            return
-        }
-
-        HookLogManager.d(TAG, "Local BLE simulation started")
+        // 之前：若加载时 simulate_mode != Self 则直接 return（连 Hook 都不装），
+        // 导致「先启动蓝牙、后切到本机模拟」时永远不生效，必须重启蓝牙。
+        // 现改为：无论当前模式如何都安装生命周期 Hook；是否注入在每次广播时实时判断。
+        HookLogManager.d(TAG, "Local BLE simulation hook installed")
         val gattClass = Hooker.loader(GATT_SERVICE)
 
         when {
@@ -78,20 +76,29 @@ class GattServiceHooker : PartHooker() {
         private val handler: Handler,
     ) : Runnable {
 
-        /** 启动时解析一次，避免每 500ms 重复探测反射路径。 */
-        private val scanPath = resolveScanPath(gattService)
+        /** 首次成功解析后缓存，避免每 500ms 重复探测反射路径。 */
+        private var scanPath: Pair<(Any) -> Any, Boolean>? = null
 
         override fun run() {
-            scanPath?.let { (getter, trailingMac) ->
-                val mac = HookConfig.getString(PrefKeys.PREF_MAC, DEFAULT_MAC)
-                val rssi = HookConfig.getString(PrefKeys.PREF_RSSI, DEFAULT_RSSI).toInt()
-                val advData = ByteUtils.hexStringToBytes(
-                    HookConfig.getString(PrefKeys.PREF_DATA, DEFAULT_ADV_DATA),
-                )
-                try {
-                    invokeScanResult(getter(gattService), mac, rssi, advData, trailingMac)
-                } catch (e: Throwable) {
-                    HookLogManager.e(TAG, "Mock scan injection failed: ${e.message}", e)
+            // 每次注入前实时判断模式：仅当为本机模拟(Self)时才注入。
+            // 这样切换开关（切到 Self / 切走）无需重启蓝牙，下一个 tick 即生效。
+            val mode = HookConfig.getString(PrefKeys.SIMULATE_MODE, "")
+            val isSelf = mode == SimulateMode.Self.toString()
+            if (isSelf) {
+                if (scanPath == null) {
+                    scanPath = resolveScanPath(gattService)
+                }
+                scanPath?.let { (getter, trailingMac) ->
+                    val mac = HookConfig.getString(PrefKeys.PREF_MAC, DEFAULT_MAC)
+                    val rssi = HookConfig.getString(PrefKeys.PREF_RSSI, DEFAULT_RSSI).toInt()
+                    val advData = ByteUtils.hexStringToBytes(
+                        HookConfig.getString(PrefKeys.PREF_DATA, DEFAULT_ADV_DATA),
+                    )
+                    try {
+                        invokeScanResult(getter(gattService), mac, rssi, advData, trailingMac)
+                    } catch (e: Throwable) {
+                        HookLogManager.e(TAG, "Mock scan injection failed: ${e.message}", e)
+                    }
                 }
             }
             handler.postDelayed(this, INTERVAL_MS)
