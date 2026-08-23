@@ -9,7 +9,8 @@ import net.ankio.xposed.lib.log.Logger
 class BluetoothXposedEntry : App() {
 
     override val hookers: List<HookerManifest> = listOf(
-        BluetoothHooker(),
+        // 蓝牙进程的本机模拟注入改由传统入口 BtHookEntry 负责（见 assets/xposed_init）。
+        // 这里仅保留对 app 自身进程的 Hook（SelfHooker），避免框架入口在蓝牙进程注入受限。
         SelfHooker(),
     )
 

@@ -104,3 +104,28 @@ xposed {
     minXposedVersion.set(93)
     scope("com.android.bluetooth", "net.ankio.bluetooth")
 }
+
+// 让 xposed_init 同时包含传统蓝牙入口(BtHookEntry)与框架入口(BluetoothXposedEntry)。
+// net.ankio.xposed 插件默认只生成单入口(BluetoothXposedEntry)，且其优先级可能覆盖 src/main/assets。
+// 这里在 merge<Variant>Assets 完成后强制写入双入口，确保最终 APK 两个入口都能被 LSPosed 加载。
+androidComponents {
+    onVariants { variant ->
+        val mergeTask = tasks.findByName("merge${variant.name.replaceFirstChar { it.uppercase() }}Assets")
+        if (mergeTask != null) {
+            mergeTask.doLast {
+                // 合并后的 assets 目录（AGP 8.x）
+                val mergedAssetsDir = layout.buildDirectory.dir(
+                    "intermediates/assets/${variant.name}/merge${variant.name.replaceFirstChar { it.uppercase() }}Assets",
+                ).get().asFile
+                File(mergedAssetsDir, "xposed_init").apply {
+                    parentFile.mkdirs()
+                    writeText(
+                        "net.ankio.bluetooth.hook.BtHookEntry\n" +
+                            "net.ankio.bluetooth.hook.BluetoothXposedEntry\n",
+                    )
+                    logger.lifecycle("Overwrote xposed_init at $absolutePath")
+                }
+            }
+        }
+    }
+}
