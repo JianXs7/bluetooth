@@ -25,11 +25,9 @@ import java.io.Serializable
  */
 class Main : IXposedHookLoadPackage {
 
-    private val tag = "BluetoothDebug"
-
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam?) {
         if (lpparam == null || lpparam.packageName != "com.android.bluetooth") return
-        HookLogManager.d(tag, "Main loaded, package=${lpparam.packageName}")
+        HookLogManager.d(TAG, "Main loaded, package=${lpparam.packageName}")
 
         val gattClass = XposedHelpers.findClass(GATT_SERVICE, lpparam.classLoader)
         val adapterClass = XposedHelpers.findClass(ADAPTER_SERVICE, lpparam.classLoader)
@@ -64,7 +62,7 @@ class Main : IXposedHookLoadPackage {
                 },
             )
         }.onFailure { e ->
-            HookLogManager.e(tag, "hook start/stop failed: ${e.message}", e)
+            HookLogManager.e(TAG, "hook start/stop failed: ${e.message}", e)
         }
     }
 
@@ -89,7 +87,7 @@ class Main : IXposedHookLoadPackage {
                 },
             )
         }.onFailure { e ->
-            HookLogManager.e(tag, "hook constructor/cleanup failed: ${e.message}", e)
+            HookLogManager.e(TAG, "hook constructor/cleanup failed: ${e.message}", e)
         }
     }
 
@@ -136,7 +134,7 @@ class Main : IXposedHookLoadPackage {
                     try {
                         invokeScanResult(getter(gattService), mac, rssi, advData, trailingMac)
                     } catch (e: Throwable) {
-                        HookLogManager.e(tag, "Mock scan injection failed: ${e.message}", e)
+                        HookLogManager.e(TAG, "Mock scan injection failed: ${e.message}", e)
                     }
                 }
             }
@@ -187,12 +185,12 @@ class Main : IXposedHookLoadPackage {
                     10 -> false
                     else -> continue
                 }
-                HookLogManager.d(tag, "Resolved scan target: $name")
+                HookLogManager.d(TAG, "Resolved scan target: $name")
                 return getter to trailingMac
             }
 
             HookLogManager.e(
-                tag,
+                TAG,
                 "Unsupported device; export com.android.bluetooth and open a GitHub issue",
             )
             return null
