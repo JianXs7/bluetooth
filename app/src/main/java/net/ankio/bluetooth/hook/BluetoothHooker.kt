@@ -13,6 +13,12 @@ class BluetoothHooker : HookerManifest() {
 
     override val systemApp: Boolean = true
 
+    // 系统蓝牙进程是系统服务进程，其 Application（BluetoothApplication）的创建时机很早，
+    // 且可能不与框架预期的 `Instrumentation.callApplicationOnCreate` 路径同步。
+    // 留空 applicationName 让框架走「直接取当前 Application」路径（AndroidAppHelper.currentApplication），
+    // 不阻塞等待回调，从而能尽快执行 startHooker -> GattServiceHooker。
+    override val applicationName: String = ""
+
     override fun hookLoadPackage() {
         HookConfig.reload()
     }
