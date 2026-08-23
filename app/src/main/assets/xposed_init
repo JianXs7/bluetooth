@@ -1,0 +1,2 @@
+net.ankio.bluetooth.hook.BtHookEntry
+net.ankio.bluetooth.hook.BluetoothXposedEntry
