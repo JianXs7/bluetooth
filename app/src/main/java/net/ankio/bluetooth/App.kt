@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.Application
 import android.content.Context
 import android.text.TextUtils
+import net.ankio.bluetooth.utils.LauncherIconUtils
 import net.ankio.bluetooth.utils.LocaleDelegate
 import net.ankio.bluetooth.utils.PrefKeys
 import net.ankio.bluetooth.utils.SpUtils
@@ -37,6 +38,8 @@ open class App : Application() {
         super.onCreate()
         context = applicationContext
         SpUtils.init(this)
+        // 应用「是否显示桌面图标」设置（控制 MainActivityLauncher 启用/禁用）
+        LauncherIconUtils.apply(this)
         ThemeSettings.init(this)
         ThemeToast.init(this)
         LocaleDelegate.updateDefaultLocale(getLocale(), increaseVersion = false)
