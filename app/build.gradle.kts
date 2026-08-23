@@ -106,26 +106,17 @@ xposed {
 }
 
 // 让 xposed_init 同时包含传统蓝牙入口(BtHookEntry)与框架入口(BluetoothXposedEntry)。
-// net.ankio.xposed 插件默认只生成单入口(BluetoothXposedEntry)，且其优先级可能覆盖 src/main/assets。
-// 这里在 merge<Variant>Assets 完成后强制写入双入口，确保最终 APK 两个入口都能被 LSPosed 加载。
-androidComponents {
-    onVariants { variant ->
-        val mergeTask = tasks.findByName("merge${variant.name.replaceFirstChar { it.uppercase() }}Assets")
-        if (mergeTask != null) {
-            mergeTask.doLast {
-                // 合并后的 assets 目录（AGP 8.x）
-                val mergedAssetsDir = layout.buildDirectory.dir(
-                    "intermediates/assets/${variant.name}/merge${variant.name.replaceFirstChar { it.uppercase() }}Assets",
-                ).get().asFile
-                File(mergedAssetsDir, "xposed_init").apply {
-                    parentFile.mkdirs()
-                    writeText(
-                        "net.ankio.bluetooth.hook.BtHookEntry\n" +
-                            "net.ankio.bluetooth.hook.BluetoothXposedEntry\n",
-                    )
-                    logger.lifecycle("Overwrote xposed_init at $absolutePath")
-                }
-            }
-        }
+// net.ankio.xposed 插件默认只生成单入口(BluetoothXposedEntry)，且其生成的 assets 会覆盖 src/main/assets。
+// 因此在插件生成源文件后立刻改写为双入口，确保 merge 后打入 APK 的 xposed_init 两个入口都在。
+tasks.named("generateXposedMetadata") {
+    doLast {
+        val generatedDir = layout.buildDirectory.dir("generated/xposed/assets").get().asFile
+        val initFile = File(generatedDir, "xposed_init")
+        initFile.parentFile.mkdirs()
+        initFile.writeText(
+            "net.ankio.bluetooth.hook.BtHookEntry\n" +
+                "net.ankio.bluetooth.hook.BluetoothXposedEntry\n",
+        )
+        logger.lifecycle("Overwrote generated xposed_init at ${initFile.absolutePath}")
     }
 }
