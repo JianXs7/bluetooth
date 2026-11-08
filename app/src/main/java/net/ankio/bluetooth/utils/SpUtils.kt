@@ -15,14 +15,9 @@ class SpUtils private constructor(
 ) {
 
     private val sp: SharedPreferences by lazy {
-        context.getSharedPreferences(
-            PREF_NAME,
-            if (HookUtils.getActiveAndSupportFramework()) {
-                Context.MODE_WORLD_READABLE
-            } else {
-                Context.MODE_PRIVATE
-            },
-        )
+        // 配置只由本 App 读写；Hook 侧通过 libxposed 的远程配置接口读取，
+        // 不再需要（也禁止）MODE_WORLD_READABLE。
+        context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
     }
 
     fun putBoolean(key: String, value: Boolean) {

@@ -3,7 +3,6 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("dev.rikka.tools.autoresconfig")
-    id("net.ankio.xposed") version "1.0.1"
 }
 
 android {
@@ -94,30 +93,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
-    implementation("com.github.AnkioTomas.XposedLib:lib:1.0.1")
-    compileOnly("de.robv.android.xposed:api:82")
-}
-
-xposed {
-    entryClass.set("net.ankio.bluetooth.hook.Main")
-    moduleDescription.set("A tool that can debug Bluetooth / 一个可以调试蓝牙的工具")
-    minXposedVersion.set(93)
-    scope("com.android.bluetooth", "net.ankio.bluetooth")
-}
-
-// 让 xposed_init 同时包含纯传统入口：Main（蓝牙进程）+ MainServer（app 自身）。
-// 注意：不要包含 net.ankio.xposed.lib 框架入口（BluetoothXposedEntry）——在目标 ColorOS 16 金标设备上，
-// 框架入口不会被 LSPosed 注入蓝牙进程，而纯传统 IXposedHookLoadPackage 入口(Main)可以被注入。
-// 因此这里在插件生成源文件后立即改写为纯传统双入口，确保打入 APK 的 xposed_init 生效。
-tasks.named("generateXposedMetadata") {
-    doLast {
-        val generatedDir = layout.buildDirectory.dir("generated/xposed/assets").get().asFile
-        val initFile = File(generatedDir, "xposed_init")
-        initFile.parentFile.mkdirs()
-        initFile.writeText(
-            "net.ankio.bluetooth.hook.Main\n" +
-                "net.ankio.bluetooth.hook.MainServer\n",
-        )
-        logger.lifecycle("Overwrote generated xposed_init at ${initFile.absolutePath}")
-    }
+    // 新版 Xposed API(libxposed)：仅编译期依赖，运行时由框架提供。
+    // 模块元数据改由 app/src/main/resources/META-INF/xposed/* 声明（java_init.list / scope.list / module.prop）。
+    compileOnly("io.github.libxposed:api:102.0.0")
 }

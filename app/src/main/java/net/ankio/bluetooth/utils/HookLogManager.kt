@@ -1,52 +1,33 @@
 package net.ankio.bluetooth.utils
 
-import de.robv.android.xposed.XSharedPreferences
-import de.robv.android.xposed.XposedBridge
+import android.util.Log
+import net.ankio.bluetooth.hook.HookConfig
+import net.ankio.bluetooth.hook.XposedApi
 
 /**
  * Xposed Hook日志管理工具类
  * 提供可控制的日志输出功能，支持通过设置开关控制日志输出
+ *
+ * 日志最终经 libxposed 的 XposedInterface.log 输出（可在 LSPosed 日志页查看），
+ * 开关取自宿主 App 的配置项 [LOG_ENABLED_KEY]，由框架推送更新。
  *
  * @author SmallBaby
  * @date 2025-11-13
  */
 object HookLogManager {
 
-    private const val PREF_NAME = "net.ankio.bluetooth"
-    private const val CONFIG_NAME = "config"
     private const val LOG_ENABLED_KEY = "pref_hook_log_enabled"
-
-    private val preferences: XSharedPreferences by lazy {
-        val prefs = XSharedPreferences(PREF_NAME, CONFIG_NAME)
-        // 尝试设置可读写权限
-        try {
-            prefs.makeWorldReadable()
-        } catch (e: Exception) {
-            // 忽略权限设置失败
-        }
-        prefs
-    }
 
     /**
      * 默认的日志标签
      */
     private const val DEFAULT_TAG = "BluetoothDebug"
 
-    
     /**
      * 检查是否启用日志输出
      * @return true 如果启用日志输出，false 如果禁用
      */
-    private fun isLogEnabled(): Boolean {
-        return try {
-            // 每次都强制重新加载配置，避免缓存问题
-            preferences.reload()
-            preferences.getBoolean(LOG_ENABLED_KEY, false) // 默认关闭日志
-        } catch (e: Exception) {
-            // 如果读取配置失败，默认关闭日志避免影响性能
-            false
-        }
-    }
+    private fun isLogEnabled(): Boolean = HookConfig.getBoolean(LOG_ENABLED_KEY, false) // 默认关闭日志
 
     /**
      * 输出调试日志
@@ -109,17 +90,17 @@ object HookLogManager {
      */
     private fun log(tag: String, message: String, isError: Boolean = false) {
         // 只有启用日志时才输出
-        if (isLogEnabled()) {
-            try {
-                val formattedMessage = if (isError) {
-                    "[ERROR] $tag : $message"
-                } else {
-                    "[DEBUG] $tag : $message"
-                }
-                XposedBridge.log(formattedMessage)
-            } catch (e: Exception) {
-                // 日志输出失败时不影响主功能
+        if (!isLogEnabled()) return
+        try {
+            val module = XposedApi.module ?: return
+            val formattedMessage = if (isError) {
+                "[ERROR] $tag : $message"
+            } else {
+                "[DEBUG] $tag : $message"
             }
+            module.log(if (isError) Log.ERROR else Log.DEBUG, DEFAULT_TAG, formattedMessage)
+        } catch (e: Exception) {
+            // 日志输出失败时不影响主功能
         }
     }
 
@@ -127,19 +108,5 @@ object HookLogManager {
      * 检查日志开关状态（用于设置界面显示）
      * @return 当前日志开关状态
      */
-    fun getLogStatus(): Boolean {
-        return isLogEnabled()
-    }
-
-    /**
-     * 强制重新加载配置
-     * 用于配置更新后刷新状态
-     */
-    fun reloadConfig() {
-        try {
-            preferences.reload()
-        } catch (e: Exception) {
-            // 忽略重载失败
-        }
-    }
+    fun getLogStatus(): Boolean = isLogEnabled()
 }

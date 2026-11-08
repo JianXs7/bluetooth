@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">蓝牙调试</string>
+    <string name="app_description">一个可以调试蓝牙的工具</string>
     <string name="active_error">插件未激活</string>
     <string name="active_success">插件已激活</string>
     <string name="active_restart">更新模块后请重启蓝牙栈。</string>

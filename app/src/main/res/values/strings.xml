@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">BluetoothDebug</string>
+    <string name="app_description">A tool that can debug Bluetooth</string>
     <string name="active_error">Plugin not activated.</string>
     <string name="active_success">Plugin activated</string>
     <string name="active_restart">Restart the Bluetooth stack after updating the module.</string>

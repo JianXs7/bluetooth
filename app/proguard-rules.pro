@@ -5,15 +5,14 @@
 -renamesourcefileattribute SourceFile
 
 # --- Xposed module entry & hook surface ---
--keep class net.ankio.bluetooth.hook.BluetoothXposedEntry { *; }
--keep class * extends net.ankio.xposed.lib.hook.api.HookerManifest { *; }
--keep class * implements net.ankio.xposed.lib.hook.api.PartHooker { *; }
+# META-INF/xposed/java_init.list 以「类名字符串」引用入口类，必须保留名称。
 -keep class net.ankio.bluetooth.hook.** { *; }
 
 # SelfHooker resolves these by name at runtime.
 -keep class net.ankio.bluetooth.utils.HookUtils { *; }
 
--dontwarn de.robv.android.xposed.**
+# libxposed API 由框架在运行时提供（compileOnly），无需打包也无需告警。
+-dontwarn io.github.libxposed.**
 
 # --- Gson (WebDAV payload + company_ids.json) ---
 -keep class net.ankio.bluetooth.ble.BluetoothData { *; }
