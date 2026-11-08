@@ -16,6 +16,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -55,3 +57,36 @@ jobs:
             app/build/outputs/apk/release/*.apk
             app/build/outputs/apk/release/**/output-metadata.json
           if-no-files-found: error
+
+      # LSPosed 只认 APK 根目录的 META-INF/xposed/java_init.list 作为「新版模块」标记，
+      # 打包遗漏会让模块在框架里直接消失，所以构建后必须校验一次。
+      - name: Verify libxposed metadata inside APK
+        run: |
+          set -e
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          echo "APK: $APK"
+          for f in META-INF/xposed/java_init.list META-INF/xposed/scope.list META-INF/xposed/module.prop; do
+            unzip -l "$APK" | grep -q "$f" || { echo "::error::APK 缺少 $f"; exit 1; }
+          done
+          if unzip -l "$APK" | grep -q "assets/xposed_init"; then
+            echo "::error::旧入口 assets/xposed_init 仍然存在"
+            exit 1
+          fi
+          echo "--- java_init.list ---"; unzip -p "$APK" META-INF/xposed/java_init.list
+          echo "--- scope.list ---"; unzip -p "$APK" META-INF/xposed/scope.list
+          echo "--- module.prop ---"; unzip -p "$APK" META-INF/xposed/module.prop
+
+      # 把产物发布到固定 tag 的预发布版本，方便直接 curl/浏览器下载（artifact 需要登录）。
+      - name: Publish APKs to ci-latest release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          gh release delete ci-latest --yes --cleanup-tag || true
+          gh release create ci-latest \
+            app/build/outputs/apk/release/*.apk \
+            app/build/outputs/apk/debug/*.apk \
+            --title "CI build ${GITHUB_SHA:0:7}" \
+            --notes "自动构建 $(date -u +%FT%TZ) / commit ${GITHUB_SHA}" \
+            --prerelease
