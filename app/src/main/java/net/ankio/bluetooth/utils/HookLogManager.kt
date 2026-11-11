@@ -69,7 +69,7 @@ object HookLogManager {
      * @param throwable 异常对象
      */
     fun e(message: String, throwable: Throwable) {
-        log(DEFAULT_TAG, "$message: ${throwable.message}", isError = true)
+        log(DEFAULT_TAG, "$message: ${describe(throwable)}", isError = true)
     }
 
     /**
@@ -79,7 +79,18 @@ object HookLogManager {
      * @param throwable 异常对象
      */
     fun e(tag: String, message: String, throwable: Throwable) {
-        log(tag, "$message: ${throwable.message}", isError = true)
+        log(tag, "$message: ${describe(throwable)}", isError = true)
+    }
+
+    /**
+     * 生成异常描述：类型 + 消息 + 精简堆栈。
+     * 直接在 LSPosed 日志里定位问题，无需额外抓 logcat。
+     */
+    private fun describe(throwable: Throwable): String {
+        val stack = throwable.stackTrace.take(6).joinToString(" <- ") {
+            "${it.className.substringAfterLast('.')}.${it.methodName}:${it.lineNumber}"
+        }
+        return "${throwable.javaClass.simpleName}(${throwable.message}) $stack"
     }
 
     /**

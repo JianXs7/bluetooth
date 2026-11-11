@@ -1,5 +1,6 @@
 package net.ankio.bluetooth.hook
 
+import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 
 /**
@@ -13,14 +14,33 @@ internal object Reflect {
     fun findClass(name: String, classLoader: ClassLoader): Class<*>? =
         runCatching { Class.forName(name, false, classLoader) }.getOrNull()
 
+    /** 读取实例字段（含父类），失败返回 null。 */
+    fun getField(instance: Any, name: String): Any? {
+        var current: Class<*>? = instance.javaClass
+        while (current != null) {
+            runCatching { current!!.getDeclaredField(name) }.getOrNull()?.let { field ->
+                field.isAccessible = true
+                return runCatching { field.get(instance) }.getOrNull()
+            }
+            current = current.superclass
+        }
+        return null
+    }
+
     /**
      * 调用实例方法，支持基本类型参数的自动装箱/转换（对齐 XposedHelpers.callMethod 的行为）。
+     *
+     * 目标方法内部抛出的异常会解包成原始异常，便于日志定位真正原因。
      */
     fun callMethod(instance: Any, name: String, vararg args: Any?): Any? {
         val method = findMethod(instance.javaClass, name, args)
             ?: throw NoSuchMethodException("$name with ${args.size} arg(s) in ${instance.javaClass.name}")
         method.isAccessible = true
-        return method.invoke(instance, *coerce(method.parameterTypes, args))
+        return try {
+            method.invoke(instance, *coerce(method.parameterTypes, args))
+        } catch (e: InvocationTargetException) {
+            throw e.targetException ?: e
+        }
     }
 
     private fun findMethod(clazz: Class<*>, name: String, args: Array<out Any?>): Method? {

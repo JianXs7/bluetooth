@@ -134,7 +134,10 @@ class Main : XposedModule() {
         synchronized(attachments) {
             // 同一个实例重复 start 时不重复挂载，避免每 500ms 注入多次。
             if (attachments.containsKey(gattService)) return
-            val handler = Handler(Looper.getMainLooper())
+            // 优先复用宿主自身的 Handler（ScanController 的扫描线程），
+            // 这样能在原生扫描线程上回调，避免线程校验失败与并发问题。
+            val handler = Reflect.getField(gattService, "mHandler") as? Handler
+                ?: Handler(Looper.getMainLooper())
             val broadcast = ScanBroadcaster(gattService, handler)
             attachments[gattService] = Attachment(handler, broadcast)
             handler.postDelayed(broadcast, INTERVAL_MS)
@@ -159,6 +162,9 @@ class Main : XposedModule() {
         /** 首次成功解析后缓存，避免每 500ms 重复探测反射路径。 */
         private var scanPath: Pair<(Any) -> Any?, Boolean>? = null
 
+        /** 首次注入成功后打一条日志，便于确认链路是否打通（避免每 tick 刷屏）。 */
+        private var loggedInjection = false
+
         override fun run() {
             try {
                 // 实时判断模式：仅当本机模拟(Self)时才注入；切换开关无需重启蓝牙，下一个 tick 即生效。
@@ -175,7 +181,14 @@ class Main : XposedModule() {
                             HookConfig.getString(PrefKeys.PREF_DATA, DEFAULT_ADV_DATA),
                         )
                         getter(host)?.let { target ->
-                            invokeScanResult(target, mac, rssi, advData, trailingMac)
+                            val entry = invokeScanResult(target, mac, rssi, advData, trailingMac)
+                            if (!loggedInjection) {
+                                loggedInjection = true
+                                HookLogManager.d(
+                                    TAG,
+                                    "scan injected via $entry, target=${target.javaClass.name}",
+                                )
+                            }
                         }
                     }
                 }
@@ -266,7 +279,7 @@ class Main : XposedModule() {
             rssi: Int,
             advData: ByteArray,
             trailingMac: Boolean,
-        ) {
+        ): String {
             val params: Array<Serializable> = arrayOf(
                 0x1b,
                 0x00,
@@ -281,7 +294,18 @@ class Main : XposedModule() {
                 mac,
             )
             val args = if (trailingMac) params else params.copyOf(params.size - 1)
-            Reflect.callMethod(target, "onScanResult", *args)
+            // Android 16+ 的公开入口 onScanResult 会先做线程校验与 mScanRadioStats 计数，
+            // 因此优先调用内部实现，失败再回退到公开入口。
+            var missing: NoSuchMethodException? = null
+            for (name in arrayOf("onScanResultInternal", "onScanResult")) {
+                try {
+                    Reflect.callMethod(target, name, *args)
+                    return name
+                } catch (e: NoSuchMethodException) {
+                    missing = e
+                }
+            }
+            throw missing ?: NoSuchMethodException("onScanResult")
         }
     }
 }
