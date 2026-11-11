@@ -95,18 +95,40 @@ class Main : XposedModule() {
     /**
      * Android 16+：扫描逻辑从 GattService 拆到独立的 ScanController（com.android.bluetooth.le_scan），
      * 由 AdapterService 在蓝牙开启时创建，其 onScanResult(...) 即原生扫描结果回调入口。
+     *
+     * 实例获取以 AdapterService.startScanController() 之后调用 getBluetoothScanController() 为主，
+     * 因为构造器 Hook 中 chain.thisObject 不一定可用；构造器 Hook 仅作兜底。
      */
     private fun installScanController(scanControllerClass: Class<*>, adapterClass: Class<*>) {
         runCatching {
-            val constructors = findConstructors(scanControllerClass, adapterClass)
-            if (constructors.isEmpty()) error("ScanController constructor not found")
-            constructors.forEach { constructor ->
-                hook(constructor).intercept { chain ->
+            val start = findMethod(adapterClass, "startScanController")
+            if (start != null) {
+                hook(start).intercept { chain ->
                     val result = chain.proceed()
-                    chain.thisObject?.let { attachBroadcaster(it) }
+                    chain.thisObject?.let { adapter ->
+                        resolveScanController(adapter)?.let { controller ->
+                            HookLogManager.d(TAG, "got ScanController from AdapterService")
+                            attachBroadcaster(controller)
+                        }
+                    }
                     result
                 }
             }
+
+            findConstructors(scanControllerClass, adapterClass).forEach { constructor ->
+                hook(constructor).intercept { chain ->
+                    val result = chain.proceed()
+                    val host = chain.thisObject
+                    if (host == null) {
+                        HookLogManager.d(TAG, "ScanController construct hook: thisObject is null")
+                    } else {
+                        HookLogManager.d(TAG, "got ScanController from construct hook")
+                        attachBroadcaster(host)
+                    }
+                    result
+                }
+            }
+
             // 蓝牙关闭时 AdapterService.stopScanController() 会销毁扫描控制器，顺便停掉定时链
             findMethod(adapterClass, "stopScanController")?.let { stop ->
                 hook(stop).intercept { chain ->
@@ -114,9 +136,22 @@ class Main : XposedModule() {
                     chain.proceed()
                 }
             }
-            HookLogManager.d(TAG, "hooked ScanController, constructors=${constructors.size}")
+            HookLogManager.d(
+                TAG,
+                "hooked ScanController, startScanController=${start != null}",
+            )
         }.onFailure { e ->
             HookLogManager.e(TAG, "hook ScanController failed: ${e.message}", e)
+        }
+    }
+
+    /** 通过 AdapterService 的 getBluetoothScanController() 取当前扫描控制器实例。 */
+    private fun resolveScanController(adapter: Any): Any? {
+        val raw = runCatching { Reflect.callMethod(adapter, "getBluetoothScanController") }.getOrNull()
+        return when {
+            raw == null -> null
+            raw is java.util.Optional<*> -> raw.orElse(null)
+            else -> raw
         }
     }
 
@@ -136,11 +171,15 @@ class Main : XposedModule() {
             if (attachments.containsKey(gattService)) return
             // 优先复用宿主自身的 Handler（ScanController 的扫描线程），
             // 这样能在原生扫描线程上回调，避免线程校验失败与并发问题。
-            val handler = Reflect.getField(gattService, "mHandler") as? Handler
-                ?: Handler(Looper.getMainLooper())
+            val ownHandler = Reflect.getField(gattService, "mHandler") as? Handler
+            val handler = ownHandler ?: Handler(Looper.getMainLooper())
             val broadcast = ScanBroadcaster(gattService, handler)
             attachments[gattService] = Attachment(handler, broadcast)
             handler.postDelayed(broadcast, INTERVAL_MS)
+            HookLogManager.d(
+                TAG,
+                "attached broadcaster, ownHandler=${ownHandler != null}, type=${gattService.javaClass.name}",
+            )
         }
     }
 
