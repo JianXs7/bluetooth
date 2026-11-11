@@ -83,5 +83,7 @@ class SpUtils private constructor(
 
         fun getLong(key: String, default: Long = 0): Long =
             instance.getLong(key, default)
+
+        fun all(): Map<String, *> = instance.all()
     }
 }
