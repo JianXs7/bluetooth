@@ -34,11 +34,16 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      # tee 保存构建日志：失败时日志会发布到 ci-logs 预发布版本，未登录也能查看。
       - name: Build debug APK
-        run: ./gradlew :app:assembleDebug --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle-debug.log
 
       - name: Build release APK
-        run: ./gradlew :app:assembleRelease --no-daemon
+        run: |
+          set -o pipefail
+          ./gradlew :app:assembleRelease --no-daemon --stacktrace 2>&1 | tee gradle-release.log
 
       - name: Upload debug APK artifact
         uses: actions/upload-artifact@v4
@@ -89,4 +94,21 @@ jobs:
             app/build/outputs/apk/debug/*.apk \
             --title "CI build ${GITHUB_SHA:0:7}" \
             --notes "自动构建 $(date -u +%FT%TZ) / commit ${GITHUB_SHA}" \
+            --prerelease
+
+      # 构建日志（含失败原因）发布到 ci-logs 预发布版本，便于未登录状态下排查。
+      - name: Publish build logs
+        if: always() && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          if ! ls gradle-*.log >/dev/null 2>&1; then
+            echo "no gradle log produced"
+            exit 0
+          fi
+          gh release delete ci-logs --yes --cleanup-tag || true
+          gh release create ci-logs gradle-*.log \
+            --title "CI logs ${GITHUB_SHA:0:7}" \
+            --notes "构建日志 $(date -u +%FT%TZ) / commit ${GITHUB_SHA}" \
             --prerelease

@@ -96,6 +96,8 @@ dependencies {
     // 新版 Xposed API(libxposed)：仅编译期依赖，运行时由框架提供。
     // 模块元数据改由 app/src/main/resources/META-INF/xposed/* 声明（java_init.list / scope.list / module.prop）。
     compileOnly("io.github.libxposed:api:102.0.0")
-    // 模块 App 侧与框架通信（远程配置），随 APK 一起打包。
-    implementation("io.github.libxposed:service:102.0.0")
+    // 模块 App 侧与框架通信（下发服务 / 远程配置），随 APK 一起打包。
+    // 固定用 101.0.0：102.0.0 的 AAR 要求 minCompileSdk=37，而本项目 compileSdk=36；
+    // 客户端 API 版本低于框架（框架 2.2.1 为 API 102）仍可正常通信。
+    implementation("io.github.libxposed:service:101.0.0")
 }
