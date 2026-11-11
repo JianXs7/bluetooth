@@ -96,4 +96,6 @@ dependencies {
     // 新版 Xposed API(libxposed)：仅编译期依赖，运行时由框架提供。
     // 模块元数据改由 app/src/main/resources/META-INF/xposed/* 声明（java_init.list / scope.list / module.prop）。
     compileOnly("io.github.libxposed:api:102.0.0")
+    // 模块 App 侧与框架通信（远程配置），随 APK 一起打包。
+    implementation("io.github.libxposed:service:102.0.0")
 }

@@ -14,6 +14,10 @@
 # libxposed API 由框架在运行时提供（compileOnly），无需打包也无需告警。
 -dontwarn io.github.libxposed.**
 
+# libxposed service：manifest 中声明了 XposedProvider（authorities=<包名>.XposedService），
+# 框架靠它把服务 binder 下发给模块 App，类名与成员都不能被混淆。
+-keep class io.github.libxposed.service.** { *; }
+
 # --- Gson (WebDAV payload + company_ids.json) ---
 -keep class net.ankio.bluetooth.ble.BluetoothData { *; }
 -keep class net.ankio.bluetooth.data.BluetoothCompany { *; }

@@ -6,6 +6,7 @@ import android.content.Context
 import android.text.TextUtils
 import net.ankio.bluetooth.utils.LauncherIconUtils
 import net.ankio.bluetooth.utils.LocaleDelegate
+import net.ankio.bluetooth.utils.ModuleService
 import net.ankio.bluetooth.utils.PrefKeys
 import net.ankio.bluetooth.utils.SpUtils
 import net.ankio.theme.ThemeSettings
@@ -38,6 +39,8 @@ open class App : Application() {
         super.onCreate()
         context = applicationContext
         SpUtils.init(this)
+        // 注册 Xposed 服务监听：框架下发服务后把本地配置同步到远程配置
+        ModuleService.register()
         // 应用「是否显示桌面图标」设置（控制 MainActivityLauncher 启用/禁用）
         LauncherIconUtils.apply(this)
         ThemeSettings.init(this)

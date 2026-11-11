@@ -22,6 +22,7 @@ class SpUtils private constructor(
 
     fun putBoolean(key: String, value: Boolean) {
         sp.edit { putBoolean(key, value) }
+        ModuleService.syncConfig()
     }
 
     fun getBoolean(key: String, default: Boolean = false): Boolean =
@@ -29,6 +30,7 @@ class SpUtils private constructor(
 
     fun putString(key: String, value: String) {
         sp.edit { putString(key, value) }
+        ModuleService.syncConfig()
     }
 
     fun getString(key: String, default: String = ""): String =
@@ -36,6 +38,7 @@ class SpUtils private constructor(
 
     fun putInt(key: String, value: Int) {
         sp.edit { putInt(key, value) }
+        ModuleService.syncConfig()
     }
 
     fun getInt(key: String, default: Int = 0): Int =
@@ -43,10 +46,14 @@ class SpUtils private constructor(
 
     fun putLong(key: String, value: Long) {
         sp.edit { putLong(key, value) }
+        ModuleService.syncConfig()
     }
 
     fun getLong(key: String, default: Long = 0): Long =
         sp.getLong(key, default)
+
+    /** 本地配置快照，用于同步给 Xposed 框架的远程配置 */
+    fun all(): Map<String, *> = sp.all
 
     companion object {
         private const val PREF_NAME = "config"
