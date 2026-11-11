@@ -22,12 +22,27 @@ android {
         }
     }
 
+    signingConfigs {
+        // 固定签名：CI 每次构建若使用随机 debug keystore，升级安装就会因签名不一致而失败，
+        // 而卸载重装会清空 LSPosed 里的启用状态与作用域，故仓库内固定一份调试签名。
+        create("ci") {
+            storeFile = rootProject.file("keystore/ci.p12")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+            storeType = "PKCS12"
+        }
+    }
+
     buildTypes {
         getByName("release") {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("ci")
+        }
+        getByName("debug") {
+            signingConfig = signingConfigs.getByName("ci")
         }
     }
     compileOptions {

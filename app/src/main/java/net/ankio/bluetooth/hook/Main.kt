@@ -40,15 +40,19 @@ class Main : XposedModule() {
         val classLoader = param.defaultClassLoader ?: return
         val gattClass = Reflect.findClass(GATT_SERVICE, classLoader)
         val adapterClass = Reflect.findClass(ADAPTER_SERVICE, classLoader)
-        if (gattClass == null || adapterClass == null) {
+        val scanControllerClass = Reflect.findClass(SCAN_CONTROLLER, classLoader)
+        if (adapterClass == null || (gattClass == null && scanControllerClass == null)) {
             HookLogManager.e(TAG, "Bluetooth service classes not found")
             return
         }
 
         when {
+            // Android 16+：扫描逻辑从 GattService 拆到独立的 ScanController
+            scanControllerClass != null -> installScanController(scanControllerClass, adapterClass!!)
+            gattClass == null -> HookLogManager.e(TAG, "GattService not found")
             hasMethod(gattClass, "start") -> installStartStop(gattClass, "start", "stop")
             hasMethod(gattClass, "initMiFeature") -> installStartStop(gattClass, "initMiFeature", "cleanup")
-            else -> installConstructorStop(gattClass, adapterClass)
+            else -> installConstructorStop(gattClass, adapterClass!!)
         }
     }
 
@@ -88,6 +92,44 @@ class Main : XposedModule() {
         }
     }
 
+    /**
+     * Android 16+：扫描逻辑从 GattService 拆到独立的 ScanController（com.android.bluetooth.le_scan），
+     * 由 AdapterService 在蓝牙开启时创建，其 onScanResult(...) 即原生扫描结果回调入口。
+     */
+    private fun installScanController(scanControllerClass: Class<*>, adapterClass: Class<*>) {
+        runCatching {
+            val constructors = findConstructors(scanControllerClass, adapterClass)
+            if (constructors.isEmpty()) error("ScanController constructor not found")
+            constructors.forEach { constructor ->
+                hook(constructor).intercept { chain ->
+                    val result = chain.proceed()
+                    chain.thisObject?.let { attachBroadcaster(it) }
+                    result
+                }
+            }
+            // 蓝牙关闭时 AdapterService.stopScanController() 会销毁扫描控制器，顺便停掉定时链
+            findMethod(adapterClass, "stopScanController")?.let { stop ->
+                hook(stop).intercept { chain ->
+                    detachAll()
+                    chain.proceed()
+                }
+            }
+            HookLogManager.d(TAG, "hooked ScanController, constructors=${constructors.size}")
+        }.onFailure { e ->
+            HookLogManager.e(TAG, "hook ScanController failed: ${e.message}", e)
+        }
+    }
+
+    /** 停止所有广播定时链（蓝牙扫描控制器销毁时调用）。 */
+    private fun detachAll() {
+        val drained = synchronized(attachments) {
+            val values = attachments.values.toList()
+            attachments.clear()
+            values
+        }
+        drained.forEach { it.handler.removeCallbacks(it.runnable) }
+    }
+
     private fun attachBroadcaster(gattService: Any) {
         synchronized(attachments) {
             // 同一个实例重复 start 时不重复挂载，避免每 500ms 注入多次。
@@ -110,7 +152,7 @@ class Main : XposedModule() {
     )
 
     private class ScanBroadcaster(
-        private val gattService: Any,
+        private val host: Any,
         private val handler: Handler,
     ) : Runnable {
 
@@ -123,7 +165,7 @@ class Main : XposedModule() {
                 // 配置由框架推送更新，读取无 IO 开销。
                 if (HookConfig.isSimulateModeSelf()) {
                     if (scanPath == null) {
-                        scanPath = resolveScanPath(gattService)
+                        scanPath = resolveScanPath(host)
                     }
                     scanPath?.let { (getter, trailingMac) ->
                         val mac = HookConfig.getString(PrefKeys.PREF_MAC, DEFAULT_MAC)
@@ -132,7 +174,7 @@ class Main : XposedModule() {
                         val advData = ByteUtils.hexStringToBytes(
                             HookConfig.getString(PrefKeys.PREF_DATA, DEFAULT_ADV_DATA),
                         )
-                        getter(gattService)?.let { target ->
+                        getter(host)?.let { target ->
                             invokeScanResult(target, mac, rssi, advData, trailingMac)
                         }
                     }
@@ -151,6 +193,7 @@ class Main : XposedModule() {
         private const val TARGET_PACKAGE = "com.android.bluetooth"
         private const val GATT_SERVICE = "com.android.bluetooth.gatt.GattService"
         private const val ADAPTER_SERVICE = "com.android.bluetooth.btservice.AdapterService"
+        private const val SCAN_CONTROLLER = "com.android.bluetooth.le_scan.ScanController"
         private const val INTERVAL_MS = 500L
         private const val DEFAULT_MAC = "76:A7:8A:67:66:C9"
         private const val DEFAULT_RSSI = "-50"
@@ -166,29 +209,35 @@ class Main : XposedModule() {
             return candidates.firstOrNull { it.parameterCount == 0 } ?: candidates.singleOrNull()
         }
 
-        private fun findConstructor(clazz: Class<*>, paramType: Class<*>): Constructor<*>? =
-            clazz.declaredConstructors.firstOrNull {
-                it.parameterCount == 1 && it.parameterTypes[0].isAssignableFrom(paramType)
-            } ?: clazz.declaredConstructors.firstOrNull { it.parameterCount == 1 }
+        /** 取所有第一个参数兼容 [firstParam] 的构造器，按参数个数升序（优先最短重载）。 */
+        private fun findConstructors(clazz: Class<*>, firstParam: Class<*>): List<Constructor<*>> =
+            clazz.declaredConstructors
+                .filter { it.parameterCount > 0 && it.parameterTypes[0].isAssignableFrom(firstParam) }
+                .sortedBy { it.parameterCount }
 
-        private fun resolveScanPath(gattService: Any): Pair<(Any) -> Any?, Boolean>? {
-            val gattClass = gattService.javaClass
+        private fun findConstructor(clazz: Class<*>, firstParam: Class<*>): Constructor<*>? =
+            findConstructors(clazz, firstParam).firstOrNull()
+                ?: clazz.declaredConstructors.firstOrNull { it.parameterCount == 1 }
+
+        private fun resolveScanPath(host: Any): Pair<(Any) -> Any?, Boolean>? {
+            val hostClass = host.javaClass
             val candidates: List<Pair<String, (Any) -> Any?>> = buildList {
-                if (hasMethod(gattClass, "getScanController")) {
+                // Android 16+ 传入的就是 ScanController 实例本身
+                add("self" to { s: Any -> s })
+                if (hasMethod(hostClass, "getScanController")) {
                     add("getScanController" to { s: Any -> Reflect.callMethod(s, "getScanController") })
                 }
-                if (hasMethod(gattClass, "getTransitionalScanHelper")) {
+                if (hasMethod(hostClass, "getTransitionalScanHelper")) {
                     add(
                         "getTransitionalScanHelper" to { s: Any ->
                             Reflect.callMethod(s, "getTransitionalScanHelper")
                         },
                     )
                 }
-                add("GattService" to { s: Any -> s })
             }
 
             for ((name, getter) in candidates) {
-                val target = runCatching { getter(gattService) }.getOrNull() ?: continue
+                val target = runCatching { getter(host) }.getOrNull() ?: continue
                 val trailingMac = when (onScanResultParamCount(target)) {
                     11 -> true
                     10 -> false
